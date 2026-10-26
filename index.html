@@ -1,1 +1,63 @@
+<canvas id="c" width="600" height="400"></canvas>
+<script>
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
 
+  // One height number for every pixel. Starts flat (all zeros).
+  const heights = new Float32Array(W * H);
+
+  // The picture we actually show on screen. Start it as flat gray.
+  const picture = ctx.createImageData(W, H);
+  for (let p = 0; p < picture.data.length; p += 4) {
+    picture.data[p] = 128;      // red
+    picture.data[p + 1] = 128;  // green
+    picture.data[p + 2] = 128;  // blue
+    picture.data[p + 3] = 255;  // fully opaque
+  }
+  ctx.putImageData(picture, 0, 0);
+
+  // Raise (or lower) the ground around a point, more in the middle, less at the edge.
+  function brush(cx, cy, radius, strength) {
+    for (let y = cy - radius; y <= cy + radius; y++) {
+      for (let x = cx - radius; x <= cx + radius; x++) {
+        if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue; // stay inside canvas
+        const distance = Math.hypot(x - cx, y - cy);
+        if (distance > radius) continue;                           // outside the circle
+        const falloff = 1 - distance / radius;                     // 1 at center, 0 at edge
+        heights[y * W + x] += strength * falloff;
+      }
+    }
+  }
+
+  // Turn heights into light and shadow.
+  function render() {
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        // Slope: compare the neighbor on the right/left, and below/above.
+        const slopeX = heights[i + 1] - heights[i - 1];
+        const slopeY = heights[i + W] - heights[i - W];
+        // Light comes from the top-left: slopes facing it get brighter.
+        const shade = 128 + (slopeX + slopeY) * 8;
+        const p = i * 4;
+        picture.data[p] = shade;
+        picture.data[p + 1] = shade;
+        picture.data[p + 2] = shade;
+      }
+    }
+    ctx.putImageData(picture, 0, 0);
+  }
+
+  let drawing = false;
+  canvas.addEventListener("mousedown", () => drawing = true);
+  canvas.addEventListener("mouseup", () => drawing = false);
+  canvas.addEventListener("mouseleave", () => drawing = false);
+  canvas.addEventListener("mousemove", (e) => {
+    if (!drawing) return;
+    const direction = e.shiftKey ? -1 : 1;   // hold Shift to carve instead of raise
+    brush(e.offsetX, e.offsetY, 20, 5 * direction);
+    render();
+  });
+</script>
